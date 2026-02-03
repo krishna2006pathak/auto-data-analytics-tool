@@ -71,6 +71,20 @@ if uploaded_file is not None:
             sns.histplot(df[col], kde=True, ax=ax)
             st.pyplot(fig)
 
+    # =========================
+    # Correlation Heatmap
+    # =========================
+    if len(numeric_cols) > 1:
+        st.subheader("🔗 Correlation Heatmap")
+
+        corr = df[numeric_cols].corr()
+
+        fig, ax = plt.subplots(figsize=(8, 6))
+        sns.heatmap(corr, annot=True, cmap="coolwarm", fmt=".2f", ax=ax)
+        st.pyplot(fig)
+    else:
+        st.info("Correlation heatmap requires at least 2 numeric columns.")
+
     if st.sidebar.checkbox("Statistical Summary"):
         st.subheader("📊 Statistical Summary")
 
