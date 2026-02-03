@@ -8,10 +8,9 @@ from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LogisticRegression, LinearRegression
 from sklearn.metrics import accuracy_score, mean_squared_error
-from sklearn.metrics import mean_squared_error
+from sklearn.preprocessing import LabelEncoder
 
 st.set_page_config(page_title="Auto Data Analytics Tool", layout="wide")
-
 st.title("📊 Auto Data Analytics Tool")
 
 # =========================
@@ -38,9 +37,9 @@ if uploaded_file is not None:
     if st.sidebar.checkbox("Handle Missing Values"):
         for col in df.columns:
             if df[col].dtype in ["int64", "float64"]:
-                df[col].fillna(df[col].mean(), inplace=True)
+                df[col] = df[col].fillna(df[col].mean())
             else:
-                df[col].fillna(df[col].mode()[0], inplace=True)
+                df[col] = df[col].fillna(df[col].mode()[0])
         st.sidebar.success("Missing values handled")
 
     # =========================
@@ -48,10 +47,7 @@ if uploaded_file is not None:
     # =========================
     st.sidebar.header("⬇️ Download Data")
 
-    def convert_df_to_csv(df):
-        return df.to_csv(index=False).encode("utf-8")
-
-    csv = convert_df_to_csv(df)
+    csv = df.to_csv(index=False).encode("utf-8")
 
     st.sidebar.download_button(
         label="Download Cleaned CSV",
@@ -75,63 +71,96 @@ if uploaded_file is not None:
             sns.histplot(df[col], kde=True, ax=ax)
             st.pyplot(fig)
 
+    if st.sidebar.checkbox("Statistical Summary"):
+        st.subheader("📊 Statistical Summary")
+
+    numeric_df = df.select_dtypes(include=np.number)
+
+    if numeric_df.shape[1] == 0:
+        st.warning("No numeric columns available for summary.")
+    else:
+        summary = pd.DataFrame({
+            "Mean": numeric_df.mean(),
+            "Median": numeric_df.median(),
+            "Std Dev": numeric_df.std(),
+            "Min": numeric_df.min(),
+            "Max": numeric_df.max(),
+            "Count": numeric_df.count()
+        })
+
+        st.dataframe(summary)
+
+
+
     # =========================
     # Machine Learning
     # =========================
     st.sidebar.header("🤖 Machine Learning")
 
-if st.sidebar.checkbox("Train ML Model"):
     target_col = st.sidebar.selectbox("Select Target Column", df.columns)
 
-    X = df.drop(columns=[target_col])
-    y = df[target_col]
+    st.subheader("🤖 Machine Learning")
 
-    X = pd.get_dummies(X, drop_first=True)
+    if st.checkbox("Train ML Model"):
 
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, random_state=42
-    )
+        X = df.drop(columns=[target_col])
+        y = df[target_col]
 
-    # -------- Classification --------
-    if y.nunique() <= 10:
-        st.subheader("Model Type: Classification")
+        # Encode categorical target safely
+        if y.dtype == "object":
+            st.info("Target column is categorical → encoding applied")
+            y = LabelEncoder().fit_transform(y)
 
-        model_choice = st.sidebar.selectbox(
-            "Choose Model",
-            ["Logistic Regression", "Random Forest"]
+        # One-hot encode features
+        X = pd.get_dummies(X, drop_first=True)
+
+        X_train, X_test, y_train, y_test = train_test_split(
+            X, y, test_size=0.2, random_state=42
         )
 
-        if model_choice == "Logistic Regression":
-            model = LogisticRegression(max_iter=1000)
+        # Decide problem type automatically
+        if pd.Series(y).nunique() <= 10:
+            # -------- Classification --------
+            st.subheader("📌 Model Type: Classification")
+
+            model_choice = st.selectbox(
+                "Choose Classification Model",
+                ["Logistic Regression", "Random Forest"]
+            )
+
+            if model_choice == "Logistic Regression":
+                model = LogisticRegression(max_iter=1000)
+            else:
+                model = RandomForestClassifier(
+                    n_estimators=100, random_state=42
+                )
+
+            model.fit(X_train, y_train)
+            preds = model.predict(X_test)
+
+            acc = accuracy_score(y_test, preds)
+            st.success(f"Accuracy: {acc:.2f}")
+
         else:
-            model = RandomForestClassifier(n_estimators=100, random_state=42)
+            # -------- Regression --------
+            st.subheader("📌 Model Type: Regression")
 
-        model.fit(X_train, y_train)
-        preds = model.predict(X_test)
-        acc = accuracy_score(y_test, preds)
+            model_choice = st.selectbox(
+                "Choose Regression Model",
+                ["Linear Regression", "Random Forest Regressor"]
+            )
 
-        st.success(f"Accuracy: {acc:.2f}")
+            if model_choice == "Linear Regression":
+                model = LinearRegression()
+            else:
+                model = RandomForestRegressor(
+                    n_estimators=100, random_state=42
+                )
 
-    # -------- Regression --------
-    else:
-     st.subheader("Model Type: Regression")
+            model.fit(X_train, y_train)
+            preds = model.predict(X_test)
 
-    model_choice = st.sidebar.selectbox(
-        "Choose Model",
-        ["Linear Regression", "Random Forest"]
-    )
+            mse = mean_squared_error(y_test, preds)
+            rmse = np.sqrt(mse)
 
-    if model_choice == "Linear Regression":
-        model = LinearRegression()
-    else:
-        model = RandomForestRegressor(n_estimators=100, random_state=42)
-
-    model.fit(X_train, y_train)
-    preds = model.predict(X_test)
-
-    mse = mean_squared_error(y_test, preds)   # 👈 YE LINE ZAROORI HAI
-    rmse = np.sqrt(mse)
-
-    st.success(f"RMSE: {rmse:,.2f}")
-
-
+            st.success(f"RMSE: {rmse:,.2f}")
