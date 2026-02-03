@@ -25,6 +25,9 @@ if uploaded_file is not None:
     st.subheader("Dataset Preview")
     st.dataframe(df.head())
 
+    # ✅ DEFINE ONCE (IMPORTANT FIX)
+    numeric_cols = df.select_dtypes(include=np.number).columns
+
     # =========================
     # Cleaning Options
     # =========================
@@ -64,8 +67,6 @@ if uploaded_file is not None:
     if st.sidebar.checkbox("Show EDA"):
         st.subheader("Exploratory Data Analysis")
 
-        numeric_cols = df.select_dtypes(include=np.number).columns
-
         for col in numeric_cols:
             fig, ax = plt.subplots()
             sns.histplot(df[col], kde=True, ax=ax)
@@ -74,37 +75,37 @@ if uploaded_file is not None:
     # =========================
     # Correlation Heatmap
     # =========================
-    if len(numeric_cols) > 1:
-        st.subheader("🔗 Correlation Heatmap")
+    if st.sidebar.checkbox("Show Correlation Heatmap"):
+        if len(numeric_cols) > 1:
+            st.subheader("🔗 Correlation Heatmap")
 
-        corr = df[numeric_cols].corr()
+            corr = df[numeric_cols].corr()
+            fig, ax = plt.subplots(figsize=(8, 6))
+            sns.heatmap(corr, annot=True, cmap="coolwarm", fmt=".2f", ax=ax)
+            st.pyplot(fig)
+        else:
+            st.info("Correlation heatmap requires at least 2 numeric columns.")
 
-        fig, ax = plt.subplots(figsize=(8, 6))
-        sns.heatmap(corr, annot=True, cmap="coolwarm", fmt=".2f", ax=ax)
-        st.pyplot(fig)
-    else:
-        st.info("Correlation heatmap requires at least 2 numeric columns.")
-
+    # =========================
+    # Statistical Summary
+    # =========================
     if st.sidebar.checkbox("Statistical Summary"):
         st.subheader("📊 Statistical Summary")
 
-    numeric_df = df.select_dtypes(include=np.number)
+        numeric_df = df.select_dtypes(include=np.number)
 
-    if numeric_df.shape[1] == 0:
-        st.warning("No numeric columns available for summary.")
-    else:
-        summary = pd.DataFrame({
-            "Mean": numeric_df.mean(),
-            "Median": numeric_df.median(),
-            "Std Dev": numeric_df.std(),
-            "Min": numeric_df.min(),
-            "Max": numeric_df.max(),
-            "Count": numeric_df.count()
-        })
-
-        st.dataframe(summary)
-
-
+        if numeric_df.shape[1] == 0:
+            st.warning("No numeric columns available for summary.")
+        else:
+            summary = pd.DataFrame({
+                "Mean": numeric_df.mean(),
+                "Median": numeric_df.median(),
+                "Std Dev": numeric_df.std(),
+                "Min": numeric_df.min(),
+                "Max": numeric_df.max(),
+                "Count": numeric_df.count()
+            })
+            st.dataframe(summary)
 
     # =========================
     # Machine Learning
@@ -113,14 +114,13 @@ if uploaded_file is not None:
 
     target_col = st.sidebar.selectbox("Select Target Column", df.columns)
 
-    st.subheader("🤖 Machine Learning")
-
     if st.checkbox("Train ML Model"):
+        st.subheader("🤖 Machine Learning")
 
         X = df.drop(columns=[target_col])
         y = df[target_col]
 
-        # Encode categorical target safely
+        # Encode categorical target
         if y.dtype == "object":
             st.info("Target column is categorical → encoding applied")
             y = LabelEncoder().fit_transform(y)
@@ -132,9 +132,9 @@ if uploaded_file is not None:
             X, y, test_size=0.2, random_state=42
         )
 
-        # Decide problem type automatically
+        # Auto detect problem type
         if pd.Series(y).nunique() <= 10:
-            # -------- Classification --------
+            # Classification
             st.subheader("📌 Model Type: Classification")
 
             model_choice = st.selectbox(
@@ -142,21 +142,33 @@ if uploaded_file is not None:
                 ["Logistic Regression", "Random Forest"]
             )
 
-            if model_choice == "Logistic Regression":
-                model = LogisticRegression(max_iter=1000)
-            else:
-                model = RandomForestClassifier(
-                    n_estimators=100, random_state=42
-                )
+            model = (
+                LogisticRegression(max_iter=1000)
+                if model_choice == "Logistic Regression"
+                else RandomForestClassifier(n_estimators=100, random_state=42)
+            )
 
             model.fit(X_train, y_train)
             preds = model.predict(X_test)
 
             acc = accuracy_score(y_test, preds)
             st.success(f"Accuracy: {acc:.2f}")
+    if "Random Forest" in model_choice:
+     st.subheader("🌟 Feature Importance")
 
-        else:
-            # -------- Regression --------
+    importances = model.feature_importances_
+    feat_df = pd.DataFrame({
+        "Feature": X.columns,
+        "Importance": importances
+    }).sort_values(by="Importance", ascending=False)
+
+    st.dataframe(feat_df.head(10))
+
+    fig, ax = plt.subplots()
+    sns.barplot(x="Importance", y="Feature", data=feat_df.head(10), ax=ax)
+    st.pyplot(fig)
+else:
+            # Regression
             st.subheader("📌 Model Type: Regression")
 
             model_choice = st.selectbox(
@@ -164,17 +176,30 @@ if uploaded_file is not None:
                 ["Linear Regression", "Random Forest Regressor"]
             )
 
-            if model_choice == "Linear Regression":
-                model = LinearRegression()
-            else:
-                model = RandomForestRegressor(
-                    n_estimators=100, random_state=42
-                )
+            model = (
+                LinearRegression()
+                if model_choice == "Linear Regression"
+                else RandomForestRegressor(n_estimators=100, random_state=42)
+            )
 
             model.fit(X_train, y_train)
             preds = model.predict(X_test)
 
-            mse = mean_squared_error(y_test, preds)
-            rmse = np.sqrt(mse)
-
+            rmse = np.sqrt(mean_squared_error(y_test, preds))
             st.success(f"RMSE: {rmse:,.2f}")
+if "Random Forest" in model_choice:
+    st.subheader("🌟 Feature Importance")
+
+    importances = model.feature_importances_
+    feat_df = pd.DataFrame({
+        "Feature": X.columns,
+        "Importance": importances
+    }).sort_values(by="Importance", ascending=False)
+
+    st.dataframe(feat_df.head(10))
+
+    fig, ax = plt.subplots()
+    sns.barplot(x="Importance", y="Feature", data=feat_df.head(10), ax=ax)
+    st.pyplot(fig)
+
+
