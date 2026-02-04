@@ -10,15 +10,22 @@ from sklearn.preprocessing import LabelEncoder
 from sklearn.linear_model import LogisticRegression, LinearRegression
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from sklearn.metrics import (
-    accuracy_score, precision_score, recall_score,
-    mean_squared_error, r2_score
+    accuracy_score,
+    precision_score,
+    recall_score,
+    mean_squared_error,
+    r2_score
 )
 
 # =========================
-# CONFIG
+# PAGE CONFIG
 # =========================
-st.set_page_config("Auto Data Analytics Tool", layout="wide")
-st.title("🚀 Auto Data Analytics Tool (Phase 4 – Advanced)")
+st.set_page_config(
+    page_title="Auto Data Analytics Tool",
+    layout="wide"
+)
+
+st.title("🚀 Auto Data Analytics Tool")
 
 # =========================
 # CACHE
@@ -30,12 +37,15 @@ def load_data(file):
 # =========================
 # FILE UPLOAD
 # =========================
-file = st.file_uploader("📂 Upload CSV", type=["csv"])
+file = st.file_uploader("📂 Upload CSV File", type=["csv"])
 
-if file:
+if file is not None:
     df = load_data(file)
     st.success("Data loaded successfully")
 
+    # =========================
+    # DATA PREVIEW
+    # =========================
     st.subheader("🔍 Data Preview")
     st.dataframe(df.head())
 
@@ -50,21 +60,22 @@ if file:
     if st.sidebar.checkbox("Handle Missing Values"):
         for col in df.columns:
             if df[col].dtype in ["int64", "float64"]:
-                df[col].fillna(df[col].mean(), inplace=True)
+                df[col] = df[col].fillna(df[col].mean())
             else:
-                df[col].fillna(df[col].mode()[0], inplace=True)
+                df[col] = df[col].fillna(df[col].mode()[0])
 
     # =========================
-    # DOWNLOAD
+    # DOWNLOAD CLEANED DATA
     # =========================
     st.sidebar.download_button(
         "⬇️ Download Cleaned Data",
-        df.to_csv(index=False),
-        "cleaned_data.csv"
+        data=df.to_csv(index=False),
+        file_name="cleaned_data.csv",
+        mime="text/csv"
     )
 
     # =========================
-    # EDA (6 TABS — SAME)
+    # EDA
     # =========================
     st.sidebar.header("📊 EDA")
 
@@ -73,13 +84,13 @@ if file:
         cat_cols = df.select_dtypes(include=["object"]).columns
 
         t1, t2, t3, t4, t5, t6 = st.tabs(
-            ["Distributions", "Correlation", "Stats", "Outliers", "Categorical", "Insights"]
+            ["Distributions", "Correlation", "Statistics", "Outliers", "Categorical", "Insights"]
         )
 
         with t1:
-            for c in num_cols:
+            for col in num_cols:
                 fig, ax = plt.subplots()
-                sns.histplot(df[c], kde=True, ax=ax)
+                sns.histplot(df[col], kde=True, ax=ax)
                 st.pyplot(fig)
 
         with t2:
@@ -92,28 +103,28 @@ if file:
             st.dataframe(df[num_cols].describe())
 
         with t4:
-            for c in num_cols:
+            for col in num_cols:
                 fig, ax = plt.subplots()
-                sns.boxplot(x=df[c], ax=ax)
+                sns.boxplot(x=df[col], ax=ax)
                 st.pyplot(fig)
 
         with t5:
-            if len(cat_cols):
-                col = st.selectbox("Select column", cat_cols)
+            if len(cat_cols) > 0:
+                col = st.selectbox("Select categorical column", cat_cols)
                 fig, ax = plt.subplots()
                 sns.countplot(y=df[col], ax=ax)
                 st.pyplot(fig)
 
         with t6:
             st.info(f"Rows: {df.shape[0]} | Columns: {df.shape[1]}")
-            st.success("EDA complete")
+            st.success("EDA completed successfully")
 
     # =========================
     # MACHINE LEARNING
     # =========================
     st.sidebar.header("🤖 Machine Learning")
 
-    target = st.sidebar.selectbox("🎯 Target Column", df.columns)
+    target = st.sidebar.selectbox("🎯 Select Target Column", df.columns)
 
     if st.checkbox("Train Model"):
         X = df.drop(columns=[target])
@@ -139,11 +150,13 @@ if file:
                 ["Logistic Regression", "Random Forest"]
             )
 
-            model = (
-                LogisticRegression(max_iter=1000)
-                if model_choice == "Logistic Regression"
-                else RandomForestClassifier(n_estimators=200, random_state=42)
-            )
+            if model_choice == "Logistic Regression":
+                model = LogisticRegression(max_iter=1000)
+            else:
+                model = RandomForestClassifier(
+                    n_estimators=200,
+                    random_state=42
+                )
 
             model.fit(X_train, y_train)
             preds = model.predict(X_test)
@@ -163,11 +176,13 @@ if file:
                 ["Linear Regression", "Random Forest"]
             )
 
-            model = (
-                LinearRegression()
-                if model_choice == "Linear Regression"
-                else RandomForestRegressor(n_estimators=200, random_state=42)
-            )
+            if model_choice == "Linear Regression":
+                model = LinearRegression()
+            else:
+                model = RandomForestRegressor(
+                    n_estimators=200,
+                    random_state=42
+                )
 
             model.fit(X_train, y_train)
             preds = model.predict(X_test)
@@ -181,28 +196,33 @@ if file:
         st.subheader("⭐ Feature Importance")
 
         if hasattr(model, "feature_importances_"):
-            imp = model.feature_importances_
+            importance = model.feature_importances_
         else:
-            imp = np.abs(model.coef_[0])
+            importance = np.abs(model.coef_[0])
 
         fi = pd.DataFrame({
             "Feature": X.columns,
-            "Importance": imp
+            "Importance": importance
         }).sort_values("Importance", ascending=False)
 
         fig, ax = plt.subplots(figsize=(8, 5))
-        sns.barplot(data=fi.head(10), x="Importance", y="Feature", ax=ax)
+        sns.barplot(
+            data=fi.head(10),
+            x="Importance",
+            y="Feature",
+            ax=ax
+        )
         st.pyplot(fig)
 
         # =========================
         # SAVE MODEL
         # =========================
-        st.subheader("💾 Save Model")
+        st.subheader("💾 Save Trained Model")
 
         if st.button("Download Model"):
             with open("model.pkl", "wb") as f:
                 pickle.dump(model, f)
-            st.success("model.pkl saved")
+            st.success("model.pkl saved successfully")
 
         # =========================
         # PREDICTION PLAYGROUND
@@ -215,5 +235,5 @@ if file:
 
         if st.button("Predict"):
             input_df = pd.DataFrame([user_input])
-            pred = model.predict(input_df)
-            st.success(f"Prediction: {pred[0]}")
+            prediction = model.predict(input_df)
+            st.success(f"Prediction: {prediction[0]}")
