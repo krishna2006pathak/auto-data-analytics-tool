@@ -3,182 +3,124 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
+import pickle
 
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
 from sklearn.linear_model import LogisticRegression, LinearRegression
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
-from sklearn.metrics import accuracy_score, mean_squared_error
-
-st.set_page_config(page_title="Auto Data Analytics Tool", layout="wide")
-st.title("📊 Auto Data Analytics Tool")
+from sklearn.metrics import (
+    accuracy_score, precision_score, recall_score,
+    mean_squared_error, r2_score
+)
 
 # =========================
-# Upload CSV
+# CONFIG
 # =========================
-uploaded_file = st.file_uploader("Upload your CSV file", type=["csv"])
+st.set_page_config("Auto Data Analytics Tool", layout="wide")
+st.title("🚀 Auto Data Analytics Tool (Phase 4 – Advanced)")
 
-if uploaded_file is not None:
-    df = pd.read_csv(uploaded_file)
-    st.success("CSV uploaded successfully")
+# =========================
+# CACHE
+# =========================
+@st.cache_data
+def load_data(file):
+    return pd.read_csv(file)
 
-    st.subheader("Dataset Preview")
+# =========================
+# FILE UPLOAD
+# =========================
+file = st.file_uploader("📂 Upload CSV", type=["csv"])
+
+if file:
+    df = load_data(file)
+    st.success("Data loaded successfully")
+
+    st.subheader("🔍 Data Preview")
     st.dataframe(df.head())
 
     # =========================
-    # Data Cleaning
+    # CLEANING
     # =========================
-    st.sidebar.header("🧹 Data Cleaning")
+    st.sidebar.header("🧹 Cleaning")
 
     if st.sidebar.checkbox("Remove Duplicates"):
         df = df.drop_duplicates()
-        st.sidebar.success("Duplicates removed")
 
     if st.sidebar.checkbox("Handle Missing Values"):
         for col in df.columns:
             if df[col].dtype in ["int64", "float64"]:
-                df[col] = df[col].fillna(df[col].mean())
+                df[col].fillna(df[col].mean(), inplace=True)
             else:
-                df[col] = df[col].fillna(df[col].mode()[0])
-        st.sidebar.success("Missing values handled")
+                df[col].fillna(df[col].mode()[0], inplace=True)
 
     # =========================
-    # Download Cleaned Data
+    # DOWNLOAD
     # =========================
-    st.sidebar.header("⬇️ Download Data")
-    csv = df.to_csv(index=False).encode("utf-8")
     st.sidebar.download_button(
-        "Download Cleaned CSV",
-        csv,
-        "cleaned_data.csv",
-        "text/csv"
+        "⬇️ Download Cleaned Data",
+        df.to_csv(index=False),
+        "cleaned_data.csv"
     )
 
     # =========================
-    # EDA SECTION (TABS)
+    # EDA (6 TABS — SAME)
     # =========================
-    st.sidebar.header("📈 EDA")
+    st.sidebar.header("📊 EDA")
 
     if st.sidebar.checkbox("Show EDA"):
-        st.subheader("📊 Exploratory Data Analysis")
+        num_cols = df.select_dtypes(include=np.number).columns
+        cat_cols = df.select_dtypes(include=["object"]).columns
 
-        numeric_cols = df.select_dtypes(include=np.number).columns
-        cat_cols = df.select_dtypes(include=["object", "category"]).columns
-
-        tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(
-            ["📈 Distributions", "🔗 Correlation", "📊 Statistics",
-             "📦 Outliers", "🧩 Categorical", "🧠 Insights"]
+        t1, t2, t3, t4, t5, t6 = st.tabs(
+            ["Distributions", "Correlation", "Stats", "Outliers", "Categorical", "Insights"]
         )
 
-        # -------- TAB 1: Distributions --------
-        with tab1:
-            if len(numeric_cols) == 0:
-                st.warning("No numeric columns found.")
-            else:
-                for col in numeric_cols:
-                    fig, ax = plt.subplots()
-                    sns.histplot(df[col], kde=True, ax=ax)
-                    ax.set_title(f"Distribution of {col}")
-                    st.pyplot(fig)
-
-        # -------- TAB 2: Correlation --------
-        with tab2:
-            if len(numeric_cols) < 2:
-                st.info("Need at least 2 numeric columns.")
-            else:
-                corr = df[numeric_cols].corr()
-                fig, ax = plt.subplots(figsize=(8, 6))
-                sns.heatmap(corr, annot=True, cmap="coolwarm", fmt=".2f", ax=ax)
+        with t1:
+            for c in num_cols:
+                fig, ax = plt.subplots()
+                sns.histplot(df[c], kde=True, ax=ax)
                 st.pyplot(fig)
 
-        # -------- TAB 3: Statistics --------
-        with tab3:
-            if len(numeric_cols) == 0:
-                st.warning("No numeric columns.")
-            else:
-                summary = pd.DataFrame({
-                    "Mean": df[numeric_cols].mean(),
-                    "Median": df[numeric_cols].median(),
-                    "Std Dev": df[numeric_cols].std(),
-                    "Min": df[numeric_cols].min(),
-                    "Max": df[numeric_cols].max()
-                })
-                st.dataframe(summary)
-
-        # -------- TAB 4: Outliers --------
-        with tab4:
-            if len(numeric_cols) == 0:
-                st.warning("No numeric columns.")
-            else:
-                for col in numeric_cols:
-                    Q1 = df[col].quantile(0.25)
-                    Q3 = df[col].quantile(0.75)
-                    IQR = Q3 - Q1
-                    lower = Q1 - 1.5 * IQR
-                    upper = Q3 + 1.5 * IQR
-                    outliers = df[(df[col] < lower) | (df[col] > upper)]
-
-                    st.write(f"**{col}** → Outliers: {outliers.shape[0]}")
-
-                    fig, ax = plt.subplots()
-                    sns.boxplot(x=df[col], ax=ax)
-                    st.pyplot(fig)
-
-        # -------- TAB 5: Categorical --------
-        with tab5:
-            if len(cat_cols) == 0:
-                st.warning("No categorical columns.")
-            else:
-                col = st.selectbox("Select column", cat_cols)
-                counts = df[col].value_counts()
-
-                st.info(
-                    f"Most frequent value: **{counts.idxmax()}** "
-                    f"({counts.max()} rows)"
-                )
-
+        with t2:
+            if len(num_cols) > 1:
                 fig, ax = plt.subplots(figsize=(8, 5))
-                sns.countplot(y=df[col], order=counts.index, ax=ax)
+                sns.heatmap(df[num_cols].corr(), annot=True, cmap="coolwarm", ax=ax)
                 st.pyplot(fig)
 
-        # -------- TAB 6: Insights --------
-        with tab6:
-            rows, cols = df.shape
-            st.write(f"Dataset has **{rows} rows** and **{cols} columns**")
+        with t3:
+            st.dataframe(df[num_cols].describe())
 
-            missing = df.isna().sum().sum()
-            if missing == 0:
-                st.success("No missing values")
-            else:
-                st.warning(f"{missing} missing values found")
+        with t4:
+            for c in num_cols:
+                fig, ax = plt.subplots()
+                sns.boxplot(x=df[c], ax=ax)
+                st.pyplot(fig)
 
-            if len(numeric_cols) > 0:
-                high_var = df[numeric_cols].std().idxmax()
-                st.info(
-                    f"Column **{high_var}** has highest variation "
-                    f"(Std = {df[high_var].std():.2f})"
-                )
+        with t5:
+            if len(cat_cols):
+                col = st.selectbox("Select column", cat_cols)
+                fig, ax = plt.subplots()
+                sns.countplot(y=df[col], ax=ax)
+                st.pyplot(fig)
 
-            if len(cat_cols) > 0:
-                top_col = cat_cols[0]
-                top_val = df[top_col].value_counts().idxmax()
-                st.info(
-                    f"In **{top_col}**, most common value is **{top_val}**"
-                )
+        with t6:
+            st.info(f"Rows: {df.shape[0]} | Columns: {df.shape[1]}")
+            st.success("EDA complete")
 
     # =========================
     # MACHINE LEARNING
     # =========================
     st.sidebar.header("🤖 Machine Learning")
-    target_col = st.sidebar.selectbox("Select Target Column", df.columns)
 
-    if st.checkbox("Train ML Model"):
-        X = df.drop(columns=[target_col])
-        y = df[target_col]
+    target = st.sidebar.selectbox("🎯 Target Column", df.columns)
+
+    if st.checkbox("Train Model"):
+        X = df.drop(columns=[target])
+        y = df[target]
 
         if y.dtype == "object":
             y = LabelEncoder().fit_transform(y)
-            st.info("Target encoded")
 
         X = pd.get_dummies(X, drop_first=True)
 
@@ -186,65 +128,92 @@ if uploaded_file is not None:
             X, y, test_size=0.2, random_state=42
         )
 
-        # Classification vs Regression
+        # =========================
+        # CLASSIFICATION
+        # =========================
         if pd.Series(y).nunique() <= 10:
             st.subheader("📌 Classification")
 
             model_choice = st.selectbox(
-                "Choose Model",
+                "Select Model",
                 ["Logistic Regression", "Random Forest"]
             )
 
-            if model_choice == "Logistic Regression":
-                model = LogisticRegression(max_iter=1000)
-            else:
-                model = RandomForestClassifier(
-                    n_estimators=100, random_state=42
-                )
+            model = (
+                LogisticRegression(max_iter=1000)
+                if model_choice == "Logistic Regression"
+                else RandomForestClassifier(n_estimators=200, random_state=42)
+            )
 
             model.fit(X_train, y_train)
             preds = model.predict(X_test)
 
-            acc = accuracy_score(y_test, preds)
-            st.success(f"Accuracy: {acc:.2f}")
+            st.metric("Accuracy", accuracy_score(y_test, preds))
+            st.metric("Precision", precision_score(y_test, preds, average="weighted"))
+            st.metric("Recall", recall_score(y_test, preds, average="weighted"))
 
+        # =========================
+        # REGRESSION
+        # =========================
         else:
             st.subheader("📌 Regression")
 
             model_choice = st.selectbox(
-                "Choose Model",
+                "Select Model",
                 ["Linear Regression", "Random Forest"]
             )
 
-            if model_choice == "Linear Regression":
-                model = LinearRegression()
-            else:
-                model = RandomForestRegressor(
-                    n_estimators=100, random_state=42
-                )
+            model = (
+                LinearRegression()
+                if model_choice == "Linear Regression"
+                else RandomForestRegressor(n_estimators=200, random_state=42)
+            )
 
             model.fit(X_train, y_train)
             preds = model.predict(X_test)
 
-            rmse = np.sqrt(mean_squared_error(y_test, preds))
-            st.success(f"RMSE: {rmse:,.2f}")
+            st.metric("RMSE", np.sqrt(mean_squared_error(y_test, preds)))
+            st.metric("R² Score", r2_score(y_test, preds))
 
-        # Feature Importance
-        if "Random Forest" in model_choice:
-            st.subheader("⭐ Feature Importance")
+        # =========================
+        # FEATURE IMPORTANCE
+        # =========================
+        st.subheader("⭐ Feature Importance")
 
-            feat_df = pd.DataFrame({
-                "Feature": X.columns,
-                "Importance": model.feature_importances_
-            }).sort_values(by="Importance", ascending=False)
+        if hasattr(model, "feature_importances_"):
+            imp = model.feature_importances_
+        else:
+            imp = np.abs(model.coef_[0])
 
-            st.dataframe(feat_df.head(10))
+        fi = pd.DataFrame({
+            "Feature": X.columns,
+            "Importance": imp
+        }).sort_values("Importance", ascending=False)
 
-            fig, ax = plt.subplots(figsize=(8, 5))
-            sns.barplot(
-                data=feat_df.head(10),
-                x="Importance",
-                y="Feature",
-                ax=ax
-            )
-            st.pyplot(fig)
+        fig, ax = plt.subplots(figsize=(8, 5))
+        sns.barplot(data=fi.head(10), x="Importance", y="Feature", ax=ax)
+        st.pyplot(fig)
+
+        # =========================
+        # SAVE MODEL
+        # =========================
+        st.subheader("💾 Save Model")
+
+        if st.button("Download Model"):
+            with open("model.pkl", "wb") as f:
+                pickle.dump(model, f)
+            st.success("model.pkl saved")
+
+        # =========================
+        # PREDICTION PLAYGROUND
+        # =========================
+        st.subheader("🎯 Prediction Playground")
+
+        user_input = {}
+        for col in X.columns:
+            user_input[col] = st.number_input(col, value=0.0)
+
+        if st.button("Predict"):
+            input_df = pd.DataFrame([user_input])
+            pred = model.predict(input_df)
+            st.success(f"Prediction: {pred[0]}")
